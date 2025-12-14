@@ -1,0 +1,19 @@
+{
+    "anjian_path": "C:\\Program Files\\Anjian\\Anjian.exe",
+    "start_hour": 8,
+    "start_minute": 0,
+    "end_hour": 22,
+    "end_minute": 0,
+    "active_days": [0, 1, 2, 3, 4],
+    "boot_delay": 15,
+    "launch_wait": 8,
+    "retry_count": 5,
+    "retry_interval": 3,
+    "button_wait": 4,
+    "button1_text": "开始使用",
+    "button2_text": "启动",
+    "window_keyword": "YZ2K2",
+    "show_progress": true,
+    "keep_window_topmost": false
+}
+
