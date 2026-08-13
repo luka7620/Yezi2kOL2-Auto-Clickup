@@ -10,6 +10,7 @@ except ImportError as error:
     raise unittest.SkipTest(f"未安装 Tk：{error}")
 
 import app_config
+import task_scheduler
 from config_gui import ConfigGUI
 from progress_window import ProgressWindow
 
@@ -123,12 +124,12 @@ class ConfigGUISmokeTests(TkTestCase):
             }
             with mock.patch.object(gui, "_launch_info", return_value=missing), \
                     mock.patch("config_gui.subprocess.Popen") as popen, \
-                    mock.patch("config_gui.subprocess.run") as run, \
+                    mock.patch("config_gui.task_scheduler.create_autostart_task") as create_task, \
                     mock.patch("config_gui.messagebox.showerror") as showerror:
                 self.assertFalse(gui.test_script())
                 self.assertFalse(gui.setup_autostart())
                 popen.assert_not_called()
-                run.assert_not_called()
+                create_task.assert_not_called()
                 self.assertEqual(showerror.call_count, 2)
 
             target = os.path.join(directory, "auto_clicker.py")
@@ -142,10 +143,59 @@ class ConfigGUISmokeTests(TkTestCase):
                 interpreter_path=os.path.join(directory, "missing-python.exe"),
             )
             with mock.patch.object(gui, "_launch_info", return_value=missing_interpreter), \
-                    mock.patch("config_gui.subprocess.run") as run, \
+                    mock.patch("config_gui.task_scheduler.create_autostart_task") as create_task, \
                     mock.patch("config_gui.messagebox.showerror"):
                 self.assertFalse(gui.setup_autostart())
-                run.assert_not_called()
+                create_task.assert_not_called()
+
+    def test_setup_and_remove_autostart_present_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "config.json")
+            target = os.path.join(directory, "auto_clicker.py")
+            with open(target, "w", encoding="utf-8"):
+                pass
+            app_config.save_config(path, {"anjian_path": __file__})
+            gui = self.make_gui(path)
+            info = {
+                "command": target,
+                "arguments": "",
+                "workdir": directory,
+                "target_path": target,
+                "interpreter_path": None,
+                "warnings": [],
+            }
+
+            success = task_scheduler.SchedulerResult(True, "ok", "成功")
+            failure = task_scheduler.SchedulerResult(False, "error", "拒绝访问")
+            with mock.patch.object(gui, "_launch_info", return_value=info), \
+                    mock.patch("config_gui.task_scheduler.create_autostart_task", return_value=success), \
+                    mock.patch("config_gui.messagebox.showinfo") as showinfo:
+                self.assertTrue(gui.setup_autostart())
+                showinfo.assert_called_once()
+                self.assertEqual(gui.status_var.get(), "开机自启已设置")
+            with mock.patch.object(gui, "_launch_info", return_value=info), \
+                    mock.patch("config_gui.task_scheduler.create_autostart_task", return_value=failure), \
+                    mock.patch("config_gui.messagebox.showerror") as showerror:
+                self.assertFalse(gui.setup_autostart())
+                showerror.assert_called_once()
+                self.assertEqual(gui.status_var.get(), "设置失败")
+
+            cases = (
+                (task_scheduler.SchedulerResult(True, "ok", "成功"), True, "已取消开机自启"),
+                (task_scheduler.SchedulerResult(False, "not_found", "找不到"), False, "取消失败或任务不存在"),
+                (task_scheduler.SchedulerResult(False, "error", "拒绝访问"), False, "取消失败或任务不存在"),
+            )
+            for result, expected, status in cases:
+                with self.subTest(result=result.status), \
+                        mock.patch("config_gui.task_scheduler.delete_autostart_task", return_value=result), \
+                        mock.patch("config_gui.messagebox.showinfo") as showinfo, \
+                        mock.patch("config_gui.messagebox.showerror") as showerror:
+                    self.assertEqual(gui.remove_autostart(), expected)
+                    self.assertEqual(gui.status_var.get(), status)
+                    if result.status == "error":
+                        showerror.assert_called_once()
+                    else:
+                        showinfo.assert_called_once()
 
 
 class ProgressWindowSmokeTests(unittest.TestCase):

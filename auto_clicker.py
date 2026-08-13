@@ -4,7 +4,6 @@
 """
 import os
 import sys
-import json
 import time
 import logging
 from datetime import datetime
@@ -60,21 +59,17 @@ class AnjianAutoClicker:
         
     def load_config(self):
         """加载配置文件"""
-        try:
-            if not os.path.exists(self.config_file):
-                self.logger.error(f"配置文件不存在: {self.config_file}")
-                return False
-                
-            with open(self.config_file, 'r', encoding='utf-8') as f:
-                self.config = json.load(f)
-                
-            self.logger.info("配置文件加载成功")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"加载配置文件失败: {str(e)}")
+        if not os.path.exists(self.config_file):
+            self.logger.error(f"配置文件不存在: {self.config_file}")
             return False
-            
+        try:
+            self.config = app_config.load_config(self.config_file)
+        except app_config.ConfigLoadError as error:
+            self.logger.error(f"加载配置文件失败: {str(error)}")
+            return False
+        self.logger.info("配置文件加载成功")
+        return True
+
     def check_time_range(self):
         """检查当前时间是否在允许的时间段内"""
         now = datetime.now()

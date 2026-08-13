@@ -1,13 +1,12 @@
 """按键精灵自动启动脚本 - 配置界面。"""
-import html
 import os
 import subprocess
 import sys
-import tempfile
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 import app_config
+import task_scheduler
 
 
 class ConfigGUI:
@@ -302,69 +301,25 @@ class ConfigGUI:
             self.status_var.set("已取消设置开机自启")
             return False
 
-        escape = lambda value: html.escape(value, quote=True)
-        task_xml = f'''<?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo><Description>按键精灵自动启动脚本</Description></RegistrationInfo>
-  <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>
-  <Principals><Principal><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
-  <Settings>
-    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
-    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><AllowHardTerminate>true</AllowHardTerminate>
-    <StartWhenAvailable>true</StartWhenAvailable><RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
-    <AllowStartOnDemand>true</AllowStartOnDemand><Enabled>true</Enabled><Hidden>false</Hidden>
-    <RunOnlyIfIdle>false</RunOnlyIfIdle><WakeToRun>false</WakeToRun><ExecutionTimeLimit>PT1H</ExecutionTimeLimit><Priority>7</Priority>
-  </Settings>
-  <Actions Context="Author"><Exec>
-    <Command>{escape(info["command"])}</Command><Arguments>{escape(info["arguments"])}</Arguments>
-    <WorkingDirectory>{escape(info["workdir"])}</WorkingDirectory>
-  </Exec></Actions>
-</Task>'''
-        temp_path = None
-        try:
-            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-16", suffix=".xml", delete=False) as temp_file:
-                temp_file.write(task_xml)
-                temp_path = temp_file.name
-            result = subprocess.run(
-                ["schtasks", "/Create", "/TN", "AnjianAutoStart", "/XML", temp_path, "/F"],
-                capture_output=True, text=True, encoding="gbk", errors="replace"
-            )
-        except OSError as error:
+        result = task_scheduler.create_autostart_task(info)
+        if not result.ok:
             self.status_var.set("设置失败")
-            messagebox.showerror("错误", f"设置开机自启失败：{error}")
-            return False
-        finally:
-            if temp_path:
-                try:
-                    os.remove(temp_path)
-                except OSError:
-                    pass
-        if result.returncode != 0:
-            self.status_var.set("设置失败")
-            messagebox.showerror("错误", f"设置失败：{result.stderr}")
+            messagebox.showerror("错误", f"设置失败：{result.message}")
             return False
         self.status_var.set("开机自启已设置")
-        messagebox.showinfo("成功", "开机自启设置成功！\n任务名称: AnjianAutoStart")
+        messagebox.showinfo("成功", f"开机自启设置成功！\n任务名称: {task_scheduler.TASK_NAME}")
         return True
 
     def remove_autostart(self):
-        try:
-            result = subprocess.run(
-                ["schtasks", "/Delete", "/TN", "AnjianAutoStart", "/F"],
-                capture_output=True, text=True, encoding="gbk", errors="replace"
-            )
-        except OSError as error:
-            self.status_var.set("取消失败")
-            messagebox.showerror("错误", f"取消开机自启失败：{error}")
-            return False
-        if result.returncode == 0:
+        result = task_scheduler.delete_autostart_task()
+        if result.ok:
             self.status_var.set("已取消开机自启")
             messagebox.showinfo("成功", "已取消开机自启")
             return True
-        if "找不到" in result.stderr or "cannot find" in result.stderr.lower():
+        if result.status == "not_found":
             messagebox.showinfo("提示", "未找到开机自启任务")
         else:
-            messagebox.showerror("错误", f"取消失败：{result.stderr}")
+            messagebox.showerror("错误", f"取消失败：{result.message}")
         self.status_var.set("取消失败或任务不存在")
         return False
 
