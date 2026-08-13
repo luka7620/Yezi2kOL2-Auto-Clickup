@@ -67,6 +67,40 @@ def default_config() -> dict:
     return {**DEFAULT_CONFIG, "active_days": list(DEFAULT_CONFIG["active_days"])}
 
 
+def _invalid_known_fields(loaded: dict) -> list[str]:
+    """返回配置中已知字段的类型或取值错误。"""
+    errors = []
+    for key, (minimum, maximum, label) in NUMBER_RULES.items():
+        if key not in loaded:
+            continue
+        value = loaded[key]
+        if isinstance(value, bool) or not isinstance(value, int):
+            errors.append(f"{key}（{label}）必须是整数")
+        elif not minimum <= value <= maximum:
+            errors.append(f"{key}（{label}）必须在 {minimum} 到 {maximum} 之间")
+
+    for key in ("anjian_path", "window_keyword", "button1_text", "button2_text"):
+        if key in loaded and not isinstance(loaded[key], str):
+            errors.append(f"{key} 必须是字符串")
+
+    for key in ("show_progress", "keep_window_topmost"):
+        if key in loaded and not isinstance(loaded[key], bool):
+            errors.append(f"{key} 必须是布尔值")
+
+    if "active_days" in loaded:
+        active_days = loaded["active_days"]
+        if not isinstance(active_days, list):
+            errors.append("active_days 必须是列表")
+        else:
+            invalid_days = [
+                day for day in active_days
+                if isinstance(day, bool) or not isinstance(day, int) or not 0 <= day <= 6
+            ]
+            if invalid_days:
+                errors.append("active_days 的元素必须是 0 到 6 的整数")
+    return errors
+
+
 def load_config(path: str) -> dict:
     try:
         with open(path, "r", encoding="utf-8") as config_file:
@@ -77,6 +111,9 @@ def load_config(path: str) -> dict:
         raise ConfigLoadError(f"无法读取或解析配置文件 {path}：{error}") from error
     if not isinstance(loaded, dict):
         raise ConfigLoadError(f"无法解析配置文件 {path}：顶层内容必须是 JSON 对象")
+    errors = _invalid_known_fields(loaded)
+    if errors:
+        raise ConfigLoadError(f"配置文件 {path} 包含无效字段：{'；'.join(errors)}")
     config = default_config()
     config.update(loaded)
     return config

@@ -63,6 +63,75 @@ class AppConfigTests(unittest.TestCase):
             self.assertEqual(loaded["end_hour"], self.EXPECTED["end_hour"])
             self.assertEqual(set(loaded), set(self.EXPECTED))
 
+    def test_load_rejects_invalid_known_field_types(self):
+        cases = (
+            ({"active_days": None}, "active_days"),
+            ({"start_hour": "abc"}, "start_hour"),
+            ({"show_progress": {}}, "show_progress"),
+            ({"button1_text": ["开始使用"]}, "button1_text"),
+            ({"start_hour": 24}, "start_hour"),
+            ({"retry_count": True}, "retry_count"),
+            ({"active_days": [0, 7]}, "active_days"),
+            ({"active_days": [0, True]}, "active_days"),
+            ({"boot_delay": 15.0}, "boot_delay"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "config.json")
+            for payload, key in cases:
+                with self.subTest(payload=payload):
+                    with open(path, "w", encoding="utf-8") as target:
+                        json.dump(payload, target)
+                    with self.assertRaises(app_config.ConfigLoadError) as raised:
+                        app_config.load_config(path)
+                    self.assertIn(key, str(raised.exception))
+
+            with open(path, "w", encoding="utf-8") as target:
+                json.dump({"start_hour": "abc", "active_days": None}, target)
+            with self.assertRaises(app_config.ConfigLoadError) as raised:
+                app_config.load_config(path)
+            self.assertIn("start_hour", str(raised.exception))
+            self.assertIn("active_days", str(raised.exception))
+
+    def test_load_accepts_valid_typed_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "config.json")
+            payload = {
+                "start_hour": 0,
+                "end_hour": 23,
+                "active_days": [6],
+                "show_progress": False,
+                "window_keyword": "新版",
+                "custom_key": {"kept": True},
+            }
+            with open(path, "w", encoding="utf-8") as target:
+                json.dump(payload, target)
+            loaded = app_config.load_config(path)
+            for key, value in payload.items():
+                self.assertEqual(loaded[key], value)
+
+    def test_resolve_show_progress_semantic_broken_falls_back(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "config.json")
+            with open(path, "w", encoding="utf-8") as target:
+                json.dump({"show_progress": {}}, target)
+            self.assertEqual(
+                app_config.resolve_show_progress(path),
+                app_config.DEFAULT_CONFIG["show_progress"],
+            )
+
+    def test_save_config_blocks_semantically_broken_unless_reset(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "config.json")
+            broken = b'{"active_days": null}'
+            with open(path, "wb") as target:
+                target.write(broken)
+            with self.assertRaises(app_config.ConfigLoadError):
+                app_config.save_config(path, {"start_hour": 9})
+            with open(path, "rb") as source:
+                self.assertEqual(source.read(), broken)
+            app_config.save_config(path, {"start_hour": 9}, reset=True)
+            self.assertEqual(app_config.load_config(path)["start_hour"], 9)
+
     def test_resolve_show_progress_missing_partial_and_broken(self):
         with tempfile.TemporaryDirectory() as directory:
             path = os.path.join(directory, "config.json")

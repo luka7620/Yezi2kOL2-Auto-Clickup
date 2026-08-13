@@ -56,6 +56,13 @@ class AutoClickerConfigTests(unittest.TestCase):
             self.assertFalse(self.clicker.load_config())
         self.assertIn("加载配置文件失败", "\n".join(captured.output))
 
+    def test_semantically_broken_config_fails_gracefully(self):
+        with open(self.clicker.config_file, "w", encoding="utf-8") as target:
+            json.dump({"start_hour": "abc"}, target)
+        with self.assertLogs(self.clicker.logger, level="ERROR") as captured:
+            self.assertFalse(self.clicker.load_config())
+        self.assertIn("加载配置文件失败", "\n".join(captured.output))
+
     def test_missing_config_still_required(self):
         with self.assertLogs(self.clicker.logger, level="ERROR") as captured:
             self.assertFalse(self.clicker.load_config())
