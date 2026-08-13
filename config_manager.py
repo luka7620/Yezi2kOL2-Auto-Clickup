@@ -22,6 +22,18 @@ DEFAULT_CONFIG = {
     "keep_window_topmost": False,
 }
 
+INT_FIELDS = (
+    ("start_hour", "开始时间（时）", 0, 23),
+    ("start_minute", "开始时间（分）", 0, 59),
+    ("end_hour", "结束时间（时）", 0, 23),
+    ("end_minute", "结束时间（分）", 0, 59),
+    ("boot_delay", "开机延迟(秒)", 0, 300),
+    ("launch_wait", "启动等待(秒)", 0, 60),
+    ("retry_count", "重试次数", 1, 20),
+    ("retry_interval", "重试间隔(秒)", 1, 30),
+    ("button_wait", "按钮等待(秒)", 0, 60),
+)
+
 
 class ConfigLoadError(Exception):
     """配置文件存在但无法读取为合法配置时抛出。"""
@@ -30,6 +42,35 @@ class ConfigLoadError(Exception):
 def default_config():
     """返回一份可独立修改的完整默认配置。"""
     return copy.deepcopy(DEFAULT_CONFIG)
+
+
+def _is_valid_int(value, minimum, maximum):
+    return isinstance(value, int) and not isinstance(value, bool) and minimum <= value <= maximum
+
+
+def _check_field_types(config):
+    """检查已知字段的持久化类型和结构，不校验是否为空。"""
+    errors = []
+
+    for key in ("anjian_path", "window_keyword", "button1_text", "button2_text"):
+        if not isinstance(config[key], str):
+            errors.append(f"配置项 {key} 的类型或取值无效")
+
+    for key, _label, minimum, maximum in INT_FIELDS:
+        if not _is_valid_int(config[key], minimum, maximum):
+            errors.append(f"配置项 {key} 的类型或取值无效")
+
+    active_days = config["active_days"]
+    if not isinstance(active_days, list) or any(
+        not _is_valid_int(day, 0, 6) for day in active_days
+    ):
+        errors.append("配置项 active_days 的类型或取值无效")
+
+    for key in ("show_progress", "keep_window_topmost"):
+        if not isinstance(config[key], bool):
+            errors.append(f"配置项 {key} 的类型或取值无效")
+
+    return errors
 
 
 def load_config(path="config.json"):
@@ -47,6 +88,9 @@ def load_config(path="config.json"):
 
     config = default_config()
     config.update(data)
+    errors = _check_field_types(config)
+    if errors:
+        raise ConfigLoadError("；".join(errors))
     return config
 
 
@@ -69,20 +113,9 @@ def validate_config(config):
     ):
         errors.append("生效日期必须是 0 到 6 之间的整数")
 
-    ranges = (
-        ("start_hour", "开始时间（时）", 0, 23),
-        ("start_minute", "开始时间（分）", 0, 59),
-        ("end_hour", "结束时间（时）", 0, 23),
-        ("end_minute", "结束时间（分）", 0, 59),
-        ("boot_delay", "开机延迟(秒)", 0, 300),
-        ("launch_wait", "启动等待(秒)", 0, 60),
-        ("retry_count", "重试次数", 1, 20),
-        ("retry_interval", "重试间隔(秒)", 1, 30),
-        ("button_wait", "按钮等待(秒)", 0, 60),
-    )
-    for key, label, minimum, maximum in ranges:
+    for key, label, minimum, maximum in INT_FIELDS:
         value = config.get(key)
-        if not isinstance(value, int) or isinstance(value, bool) or not minimum <= value <= maximum:
+        if not _is_valid_int(value, minimum, maximum):
             errors.append(f"{label}必须在 {minimum} 到 {maximum} 之间")
 
     if not isinstance(config.get("button1_text"), str) or not config["button1_text"]:

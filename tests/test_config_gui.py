@@ -158,3 +158,19 @@ def test_damaged_config_shows_once_and_falls_back(tk_root, tmp_path, monkeypatch
     collected, errors = gui.collect_form_config()
     assert errors == []
     assert collected == config_manager.default_config()
+
+
+def test_invalid_typed_config_shows_once_and_falls_back(tk_root, tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    path.write_text('{"active_days": null}', encoding="utf-8")
+    calls = []
+    monkeypatch.setattr("tkinter.messagebox.showerror", lambda *args: calls.append(args))
+
+    gui = ConfigGUI(tk_root, config_file=str(path))
+
+    assert len(calls) == 1
+    assert "active_days" in calls[0][1]
+    assert gui.config == config_manager.default_config()
+    collected, errors = gui.collect_form_config()
+    assert errors == []
+    assert collected == config_manager.default_config()

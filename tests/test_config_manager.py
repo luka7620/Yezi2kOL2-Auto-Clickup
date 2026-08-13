@@ -66,6 +66,41 @@ def test_load_partial_config_merges_defaults(tmp_path):
     assert set(loaded) == DIRECT_KEYS | FALLBACK_KEYS
 
 
+@pytest.mark.parametrize(
+    ("changes", "bad_key"),
+    [
+        ({"active_days": None}, "active_days"),
+        ({"active_days": 1}, "active_days"),
+        ({"active_days": [0, "1"]}, "active_days"),
+        ({"active_days": [0, True]}, "active_days"),
+        ({"active_days": [7]}, "active_days"),
+        ({"show_progress": "yes"}, "show_progress"),
+        ({"show_progress": 1}, "show_progress"),
+        ({"keep_window_topmost": None}, "keep_window_topmost"),
+        ({"start_hour": "8"}, "start_hour"),
+        ({"start_hour": 99}, "start_hour"),
+        ({"boot_delay": 3.5}, "boot_delay"),
+        ({"retry_count": True}, "retry_count"),
+        ({"anjian_path": None}, "anjian_path"),
+        ({"window_keyword": 123}, "window_keyword"),
+        ({"button1_text": None}, "button1_text"),
+    ],
+)
+def test_load_rejects_invalid_field_types(tmp_path, changes, bad_key):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(changes), encoding="utf-8")
+    with pytest.raises(config_manager.ConfigLoadError, match=bad_key):
+        config_manager.load_config(path)
+
+
+def test_load_permits_intentionally_empty_values(tmp_path):
+    path = tmp_path / "config.json"
+    expected = {"anjian_path": "", "window_keyword": "", "active_days": []}
+    path.write_text(json.dumps(expected), encoding="utf-8")
+    loaded = config_manager.load_config(path)
+    assert {key: loaded[key] for key in expected} == expected
+
+
 @pytest.mark.parametrize("content", ["{not json", "[1, 2]", '"abc"'])
 def test_load_rejects_invalid_or_non_object_json(tmp_path, content):
     path = tmp_path / "config.json"
