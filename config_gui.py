@@ -322,8 +322,21 @@ class ConfigGUI:
         except OSError as error:
             messagebox.showerror("错误", f"保存配置失败: {error}")
 
+    def _ensure_config_recovered(self):
+        """恢复表单尚未成功保存时，阻止使用损坏的持久化配置。"""
+        if self.load_recovery_error is None:
+            return True
+        messagebox.showerror(
+            "错误",
+            "当前配置文件无法读取，请先恢复并保存有效配置后再执行此操作。",
+        )
+        return False
+
     def test_script(self):
         """测试运行脚本"""
+        if not self._ensure_config_recovered():
+            return
+
         if not os.path.exists(self.config_file):
             messagebox.showerror("错误", "请先保存配置")
             return
@@ -344,6 +357,9 @@ class ConfigGUI:
             
     def setup_autostart(self):
         """设置开机自启"""
+        if not self._ensure_config_recovered():
+            return
+
         if not os.path.exists(self.config_file):
             messagebox.showerror("错误", "请先保存配置")
             return

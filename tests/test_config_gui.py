@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -299,3 +300,53 @@ def test_recovered_form_overwrites_only_after_confirmation(tk_root, tmp_path, mo
     assert saved["anjian_path"] == "C:/Anjian/recovered.exe"
     assert saved["window_keyword"] == "RECOVERED"
     assert gui.load_recovery_error is None
+
+
+def test_recovery_state_blocks_test_and_autostart_before_subprocess(tk_root, tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    path.write_text("{broken", encoding="utf-8")
+    error_calls = []
+    popen_calls = []
+    run_calls = []
+    monkeypatch.setattr("tkinter.messagebox.showerror", lambda *args: error_calls.append(args))
+    monkeypatch.setattr("os.path.exists", lambda value: True)
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: popen_calls.append((args, kwargs)))
+    monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: run_calls.append((args, kwargs)))
+    gui = ConfigGUI(tk_root, config_file=str(path))
+    error_calls.clear()
+
+    gui.test_script()
+    gui.setup_autostart()
+
+    assert popen_calls == []
+    assert run_calls == []
+    assert len(error_calls) == 2
+    assert all("先恢复并保存有效配置" in call[1] for call in error_calls)
+
+
+def test_test_and_autostart_resume_after_recovery_save(tk_root, tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    path.write_text("{broken", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("tkinter.messagebox.showerror", lambda *args: None)
+    monkeypatch.setattr("tkinter.messagebox.showinfo", lambda *args: None)
+    monkeypatch.setattr("tkinter.messagebox.askyesno", lambda *args: True)
+    monkeypatch.setattr("os.path.exists", lambda value: True)
+    popen_calls = []
+    run_calls = []
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: popen_calls.append((args, kwargs)))
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *args, **kwargs: run_calls.append((args, kwargs)) or SimpleNamespace(returncode=0, stderr=""),
+    )
+    gui = ConfigGUI(tk_root, config_file=str(path))
+    _fill_recovered_form(gui)
+
+    gui.save_config_action()
+    assert gui.load_recovery_error is None
+    gui.test_script()
+    gui.setup_autostart()
+
+    assert len(popen_calls) == 1
+    assert len(run_calls) == 1
+    assert not (tmp_path / "temp_task.xml").exists()
