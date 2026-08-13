@@ -375,7 +375,7 @@ class AnjianAutoClicker:
             return False
             
     def _enumerate_candidate_windows(self):
-        """枚举候选顶层窗口，关键字命中优先于兼容性启发式。"""
+        """枚举候选窗口；配置关键字时停用通用对话框启发式。"""
         candidates = []
         window_keyword = str(self.config.get('window_keyword', '') or '').strip()
 
@@ -392,7 +392,7 @@ class AnjianAutoClicker:
                 return True
             if "按键精灵" in text or "Anjian" in text or "QuickMacro" in text:
                 candidates.append((1, hwnd, text, class_name))
-            elif class_name == "#32770" and len(self.enum_child_windows(hwnd)) > 50:
+            elif not window_keyword and class_name == "#32770" and len(self.enum_child_windows(hwnd)) > 50:
                 candidates.append((1, hwnd, text, class_name))
             return True
 

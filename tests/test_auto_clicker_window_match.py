@@ -96,11 +96,33 @@ class AutoClickerWindowMatchTests(unittest.TestCase):
         self.assertEqual({candidate[1] for candidate in candidates}, {101, 202, 303})
         self.assertEqual(self.clicker._select_main_window(candidates)[0], 202)
 
-    def test_keyword_configured_but_unmatched_falls_back(self):
+    def test_unmatched_keyword_only_generic_dialog_returns_none(self):
         self.clicker.config["window_keyword"] = "OLDNAME"
         self.child_counts[303] = 60
         windows = {303: ("New Script Window", "#32770", True)}
-        self.assertEqual(self.find_with(windows), 303)
+        self.assertEqual(self.enumerate_with(windows), [])
+        self.assertIsNone(self.find_with(windows))
+
+    def test_unmatched_keyword_excludes_generic_dialog_prefers_real_window(self):
+        self.clicker.config["window_keyword"] = "OLDNAME"
+        self.child_counts[202] = 60
+        windows = {
+            202: ("订单确认", "#32770", True),
+            101: ("按键精灵 2014", "LegacyWindow", True),
+        }
+        candidates = self.enumerate_with(windows)
+        self.assertNotIn(202, {candidate[1] for candidate in candidates})
+        self.assertEqual(self.find_with(windows), 101)
+
+    def test_no_keyword_still_admits_generic_dialog(self):
+        self.child_counts[202] = 60
+        windows = {
+            202: ("订单确认", "#32770", True),
+            101: ("按键精灵 2014", "LegacyWindow", True),
+        }
+        candidates = self.enumerate_with(windows)
+        self.assertIn(202, {candidate[1] for candidate in candidates})
+        self.assertEqual(self.clicker._select_main_window(candidates)[0], 202)
 
     def test_keyword_is_case_insensitive_and_ignores_invisible(self):
         self.clicker.config["window_keyword"] = "nba2k"
