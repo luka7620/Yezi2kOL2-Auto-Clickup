@@ -279,7 +279,8 @@ class ConfigGUI:
             ("retry_interval", self.retry_interval_var, "重试间隔(秒)"),
             ("button_wait", self.button_wait_var, "按钮等待(秒)"),
         )
-        config = {
+        config = self.config.copy()
+        config.update({
             "anjian_path": self.path_var.get(),
             "window_keyword": self.window_keyword_var.get().strip(),
             "active_days": [i for i in range(7) if self.week_vars[i].get()],
@@ -287,7 +288,7 @@ class ConfigGUI:
             "button2_text": self.button2_text_var.get().strip(),
             "show_progress": bool(self.show_progress_var.get()),
             "keep_window_topmost": bool(self.keep_topmost_var.get()),
-        }
+        })
         for key, variable, label in number_fields:
             config[key] = self._parse_int(variable.get(), label, errors)
         return config, errors

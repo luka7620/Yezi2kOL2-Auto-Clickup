@@ -80,6 +80,25 @@ def test_load_and_save_round_trip_all_fields(tk_root, tmp_path, monkeypatch):
     assert json.loads(path.read_text(encoding="utf-8")) == expected
 
 
+def test_gui_save_preserves_unknown_config_fields(tk_root, tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    expected = full_config()
+    expected["custom_key"] = "preserved"
+    path.write_text(json.dumps(expected, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr("tkinter.messagebox.showinfo", lambda *args: None)
+    monkeypatch.setattr("os.path.exists", lambda value: True)
+
+    gui = ConfigGUI(tk_root, config_file=str(path))
+    gui.button_wait_var.set("13")
+    gui.save_config_action()
+
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["custom_key"] == "preserved"
+    assert saved["button_wait"] == 13
+    assert saved["anjian_path"] == expected["anjian_path"]
+    assert saved["window_keyword"] == expected["window_keyword"]
+
+
 def test_legacy_integer_text_loads_and_saves_without_losing_fields(tk_root, tmp_path, monkeypatch):
     path = tmp_path / "config.json"
     expected = full_config()
