@@ -101,7 +101,7 @@ def load_config(path="config.json"):
             data = json.load(config_file)
     except FileNotFoundError:
         return default_config()
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError) as error:
         raise ConfigLoadError(str(error)) from error
 
     if not isinstance(data, dict):

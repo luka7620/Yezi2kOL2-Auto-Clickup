@@ -132,6 +132,26 @@ def test_load_rejects_oversized_legacy_integer_as_config_error(tmp_path):
         config_manager.load_config(path)
 
 
+def test_load_wraps_oversized_unquoted_json_number(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text('{"start_hour": ' + "9" * 5000 + "}", encoding="utf-8")
+
+    with pytest.raises(config_manager.ConfigLoadError):
+        config_manager.load_config(path)
+
+
+def test_load_wraps_decoder_recursion_error(tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    path.write_text("{}", encoding="utf-8")
+
+    def fail_decode(*args, **kwargs):
+        raise RecursionError("JSON nesting too deep")
+
+    monkeypatch.setattr(config_manager.json, "load", fail_decode)
+    with pytest.raises(config_manager.ConfigLoadError, match="JSON nesting too deep"):
+        config_manager.load_config(path)
+
+
 @pytest.mark.parametrize("content", ["{not json", "[1, 2]", '"abc"'])
 def test_load_rejects_invalid_or_non_object_json(tmp_path, content):
     path = tmp_path / "config.json"
