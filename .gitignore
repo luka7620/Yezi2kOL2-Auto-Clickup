@@ -47,5 +47,5 @@ temp_task.xml
 
 # 测试文件
 test_*.py
-
+!tests/test_*.py
 

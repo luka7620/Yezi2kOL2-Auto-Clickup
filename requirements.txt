@@ -2,4 +2,6 @@ pywin32>=305
 psutil>=5.9.0
 pyinstaller>=6.0.0
 
+# 测试依赖
+pytest>=8.0
 
