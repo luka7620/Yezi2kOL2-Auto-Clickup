@@ -374,70 +374,69 @@ class AnjianAutoClicker:
             self.logger.error(f"点击按钮失败: {str(e)}")
             return False
             
+    def _enumerate_candidate_windows(self):
+        """枚举候选顶层窗口，关键字命中优先于兼容性启发式。"""
+        candidates = []
+        window_keyword = str(self.config.get('window_keyword', '') or '').strip()
+
+        def callback(hwnd, _extra):
+            if not win32gui.IsWindowVisible(hwnd):
+                return True
+            text = win32gui.GetWindowText(hwnd)
+            class_name = win32gui.GetClassName(hwnd)
+            if "TkTopLevel" in class_name or "按键精灵自动启动配置" in text:
+                return True
+            if window_keyword and window_keyword.upper() in text.upper():
+                candidates.append((0, hwnd, text, class_name))
+                self.logger.info(f"通过关键词 '{window_keyword}' 匹配到窗口: {text}")
+                return True
+            if "按键精灵" in text or "Anjian" in text or "QuickMacro" in text:
+                candidates.append((1, hwnd, text, class_name))
+            elif class_name == "#32770" and len(self.enum_child_windows(hwnd)) > 50:
+                candidates.append((1, hwnd, text, class_name))
+            return True
+
+        win32gui.EnumWindows(callback, None)
+        candidates.sort(key=lambda candidate: candidate[0])
+        return candidates
+
+    def _select_main_window(self, candidates):
+        """从最高优先级候选组中选择主窗口。"""
+        if not candidates:
+            return None
+        best_priority = candidates[0][0]
+        best_group = [candidate for candidate in candidates if candidate[0] == best_priority]
+        selected = next(
+            (candidate for candidate in best_group if "按键精灵" not in candidate[2]),
+            best_group[0],
+        )
+        return selected[1], selected[2], selected[3]
+
+    def _find_main_window(self):
+        """按配置重试枚举并返回主窗口句柄。"""
+        retry_count = self.config['retry_count']
+        retry_interval = self.config['retry_interval']
+        for attempt in range(retry_count):
+            self.logger.info(f"第 {attempt + 1}/{retry_count} 次尝试查找按键精灵窗口...")
+            selected = self._select_main_window(self._enumerate_candidate_windows())
+            if selected:
+                hwnd, title, class_name = selected
+                self.logger.info(
+                    f"找到按键精灵窗口: {title} (句柄: {hwnd}, 类名: {class_name})"
+                )
+                return hwnd
+            if attempt < retry_count - 1:
+                self.logger.info(f"未找到窗口，{retry_interval} 秒后重试...")
+                time.sleep(retry_interval)
+        return None
+
     def find_and_click_buttons(self):
         """查找并点击按键精灵的按钮"""
         try:
-            retry_count = self.config['retry_count']
-            retry_interval = self.config['retry_interval']
             button1_text = self.config['button1_text']
             button2_text = self.config['button2_text']
-            
-            # 尝试查找主窗口
-            main_hwnd = None
-            for attempt in range(retry_count):
-                self.logger.info(f"第 {attempt + 1}/{retry_count} 次尝试查找按键精灵窗口...")
-                
-                # 尝试不同的方式查找窗口
-                # 方法1: 尝试通过窗口标题查找（包含"按键精灵"的窗口，但排除我们的配置程序）
-                def enum_windows_callback(hwnd, windows):
-                    if win32gui.IsWindowVisible(hwnd):
-                        text = win32gui.GetWindowText(hwnd)
-                        class_name = win32gui.GetClassName(hwnd)
-                        
-                        # 排除我们的配置程序（Tkinter窗口）
-                        if "TkTopLevel" in class_name or "按键精灵自动启动配置" in text:
-                            return True
-                        
-                        # 查找按键精灵窗口
-                        if "按键精灵" in text or "Anjian" in text or "QuickMacro" in text:
-                            windows.append((hwnd, text, class_name))
-                        # 也查找可能是脚本文件名的窗口（对话框类型）
-                        elif class_name == "#32770":
-                            # 检查是否有很多子控件（按键精灵特征）
-                            child_count = len(self.enum_child_windows(hwnd))
-                            if child_count > 50:  # 按键精灵通常有很多控件
-                                # 如果配置中指定了窗口关键词，进行额外验证
-                                window_keyword = self.config.get('window_keyword', '')
-                                if window_keyword:
-                                    if window_keyword.upper() in text.upper():
-                                        windows.append((hwnd, text, class_name))
-                                        self.logger.info(f"通过关键词 '{window_keyword}' 匹配到窗口")
-                                else:
-                                    # 没有指定关键词，直接添加
-                                    windows.append((hwnd, text, class_name))
-                    return True
-                
-                windows = []
-                win32gui.EnumWindows(enum_windows_callback, windows)
-                
-                if windows:
-                    # 优先选择非"按键精灵"标题的窗口（更可能是实际的脚本窗口）
-                    for hwnd, text, class_name in windows:
-                        if "按键精灵" not in text:
-                            main_hwnd = hwnd
-                            self.logger.info(f"找到按键精灵窗口: {text} (句柄: {main_hwnd}, 类名: {class_name})")
-                            break
-                    
-                    # 如果没找到，使用第一个
-                    if not main_hwnd:
-                        main_hwnd = windows[0][0]
-                        self.logger.info(f"找到按键精灵窗口: {windows[0][1]} (句柄: {main_hwnd}, 类名: {windows[0][2]})")
-                    break
-                    
-                if attempt < retry_count - 1:
-                    self.logger.info(f"未找到窗口，{retry_interval} 秒后重试...")
-                    time.sleep(retry_interval)
-            
+
+            main_hwnd = self._find_main_window()
             if not main_hwnd:
                 self.logger.error("未找到按键精灵窗口")
                 return False
@@ -477,13 +476,10 @@ class AnjianAutoClicker:
                 
                 if not button2_hwnd:
                     # 尝试重新枚举所有窗口（可能弹出了新窗口）
-                    windows = []
-                    win32gui.EnumWindows(enum_windows_callback, windows)
-                    if windows:
-                        for hwnd, title, class_name in windows:
-                            button2_hwnd = self.find_button_by_text(hwnd, button2_text, log_all=log_detail)
-                            if button2_hwnd:
-                                break
+                    for _priority, hwnd, title, class_name in self._enumerate_candidate_windows():
+                        button2_hwnd = self.find_button_by_text(hwnd, button2_text, log_all=log_detail)
+                        if button2_hwnd:
+                            break
                 
                 if button2_hwnd:
                     break
