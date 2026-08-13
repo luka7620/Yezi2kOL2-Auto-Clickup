@@ -52,7 +52,11 @@ def _is_valid_int(value, minimum, maximum):
 def _normalize_int(value):
     """将无歧义的十进制整数字符串迁移为整数。"""
     if isinstance(value, str) and re.fullmatch(r"[+-]?\d+", value.strip()):
-        return int(value.strip())
+        try:
+            return int(value.strip())
+        except ValueError:
+            # 超过解释器整数文本长度限制时保留原值，交由字段检查统一报错。
+            return value
     return value
 
 

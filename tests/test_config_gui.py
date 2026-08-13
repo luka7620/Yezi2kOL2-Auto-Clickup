@@ -255,6 +255,23 @@ def test_invalid_typed_config_shows_once_and_falls_back(tk_root, tmp_path, monke
     assert collected == config_manager.default_config()
 
 
+def test_oversized_legacy_integer_shows_once_and_falls_back(tk_root, tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"start_hour": "9" * 5000}), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr("tkinter.messagebox.showerror", lambda *args: calls.append(args))
+
+    gui = ConfigGUI(tk_root, config_file=str(path))
+
+    assert len(calls) == 1
+    assert "start_hour" in calls[0][1]
+    assert gui.load_recovery_error is not None
+    assert gui.config == config_manager.default_config()
+    collected, errors = gui.collect_form_config()
+    assert errors == []
+    assert collected == config_manager.default_config()
+
+
 def _fill_recovered_form(gui):
     gui.path_var.set("C:/Anjian/recovered.exe")
     gui.window_keyword_var.set("RECOVERED")

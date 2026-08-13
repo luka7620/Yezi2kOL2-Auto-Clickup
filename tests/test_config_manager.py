@@ -124,6 +124,14 @@ def test_load_migrates_legacy_integer_strings_without_losing_fields(tmp_path):
     assert config_manager.load_config(path) == loaded
 
 
+def test_load_rejects_oversized_legacy_integer_as_config_error(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"start_hour": "9" * 5000}), encoding="utf-8")
+
+    with pytest.raises(config_manager.ConfigLoadError, match="start_hour"):
+        config_manager.load_config(path)
+
+
 @pytest.mark.parametrize("content", ["{not json", "[1, 2]", '"abc"'])
 def test_load_rejects_invalid_or_non_object_json(tmp_path, content):
     path = tmp_path / "config.json"
