@@ -14,13 +14,14 @@ import win32gui
 import win32con
 import win32process
 import win32api
+import app_config
 
 
 class AnjianAutoClicker:
     def __init__(self, test_mode=False, progress_window=None):
         self.test_mode = test_mode
         self.progress_window = progress_window
-        self.config_file = "config.json"
+        self.config_file = app_config.get_config_path()
         self.log_dir = "logs"
         self.config = None
         
@@ -631,9 +632,10 @@ def main():
     
     # 从配置文件读取是否显示窗口
     show_window_config = True
-    if os.path.exists("config.json") and not force_window and not no_window:
+    config_path = app_config.get_config_path()
+    if os.path.exists(config_path) and not force_window and not no_window:
         try:
-            with open("config.json", 'r', encoding='utf-8') as f:
+            with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
                 show_window_config = config.get("show_progress", True)
         except:
@@ -698,4 +700,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
