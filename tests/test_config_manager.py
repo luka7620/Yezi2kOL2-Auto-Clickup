@@ -71,13 +71,13 @@ def test_load_partial_config_merges_defaults(tmp_path):
     [
         ({"active_days": None}, "active_days"),
         ({"active_days": 1}, "active_days"),
-        ({"active_days": [0, "1"]}, "active_days"),
+        ({"active_days": [0, "one"]}, "active_days"),
         ({"active_days": [0, True]}, "active_days"),
         ({"active_days": [7]}, "active_days"),
         ({"show_progress": "yes"}, "show_progress"),
         ({"show_progress": 1}, "show_progress"),
         ({"keep_window_topmost": None}, "keep_window_topmost"),
-        ({"start_hour": "8"}, "start_hour"),
+        ({"start_hour": "8.0"}, "start_hour"),
         ({"start_hour": 99}, "start_hour"),
         ({"boot_delay": 3.5}, "boot_delay"),
         ({"retry_count": True}, "retry_count"),
@@ -99,6 +99,29 @@ def test_load_permits_intentionally_empty_values(tmp_path):
     path.write_text(json.dumps(expected), encoding="utf-8")
     loaded = config_manager.load_config(path)
     assert {key: loaded[key] for key in expected} == expected
+
+
+def test_load_migrates_legacy_integer_strings_without_losing_fields(tmp_path):
+    path = tmp_path / "config.json"
+    legacy = {
+        "anjian_path": "C:/Legacy/unique.exe",
+        "window_keyword": "LEGACY_WINDOW",
+        "button1_text": "Legacy First",
+        "button2_text": "Legacy Second",
+        "start_hour": "8",
+        "active_days": ["0", "3", 6],
+        "custom_key": "preserved",
+    }
+    path.write_text(json.dumps(legacy), encoding="utf-8")
+
+    loaded = config_manager.load_config(path)
+    assert loaded["start_hour"] == 8
+    assert loaded["active_days"] == [0, 3, 6]
+    for key in ("anjian_path", "window_keyword", "button1_text", "button2_text", "custom_key"):
+        assert loaded[key] == legacy[key]
+
+    config_manager.save_config(loaded, path)
+    assert config_manager.load_config(path) == loaded
 
 
 @pytest.mark.parametrize("content", ["{not json", "[1, 2]", '"abc"'])
@@ -156,7 +179,9 @@ def test_validate_valid_config_and_does_not_check_path_exists():
         ({"retry_count": 0}, "重试次数必须在 1 到 20 之间"),
         ({"button_wait": 61}, "按钮等待(秒)必须在 0 到 60 之间"),
         ({"button1_text": ""}, "第一个按钮文本不能为空"),
+        ({"button1_text": "   "}, "第一个按钮文本不能为空"),
         ({"button2_text": ""}, "第二个按钮文本不能为空"),
+        ({"button2_text": "   "}, "第二个按钮文本不能为空"),
     ],
 )
 def test_validate_reports_expected_errors(changes, message):
@@ -165,3 +190,30 @@ def test_validate_reports_expected_errors(changes, message):
     config["window_keyword"] = "YZ2K2"
     config.update(changes)
     assert message in config_manager.validate_config(config)
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "message"),
+    [
+        ("show_progress", "false", "运行时显示进度窗口必须是布尔值"),
+        ("show_progress", 1, "运行时显示进度窗口必须是布尔值"),
+        ("show_progress", None, "运行时显示进度窗口必须是布尔值"),
+        ("keep_window_topmost", "true", "保持目标窗口置顶必须是布尔值"),
+        ("keep_window_topmost", 0, "保持目标窗口置顶必须是布尔值"),
+        ("keep_window_topmost", None, "保持目标窗口置顶必须是布尔值"),
+    ],
+)
+def test_validate_rejects_invalid_boolean_fields(key, value, message):
+    config = config_manager.default_config()
+    config.update(anjian_path="app.exe", window_keyword="YZ2K2")
+    config[key] = value
+    assert message in config_manager.validate_config(config)
+
+
+def test_validated_config_can_be_saved_and_reloaded(tmp_path):
+    path = tmp_path / "config.json"
+    config = config_manager.default_config()
+    config.update(anjian_path="app.exe", window_keyword="YZ2K2")
+    assert config_manager.validate_config(config) == []
+    config_manager.save_config(config, path)
+    assert config_manager.load_config(path) == config

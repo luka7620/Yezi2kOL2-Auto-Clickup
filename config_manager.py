@@ -1,6 +1,7 @@
 """配置文件的加载、校验与保存逻辑。"""
 import copy
 import json
+import re
 
 
 DEFAULT_CONFIG = {
@@ -48,6 +49,22 @@ def _is_valid_int(value, minimum, maximum):
     return isinstance(value, int) and not isinstance(value, bool) and minimum <= value <= maximum
 
 
+def _normalize_int(value):
+    """将无歧义的十进制整数字符串迁移为整数。"""
+    if isinstance(value, str) and re.fullmatch(r"[+-]?\d+", value.strip()):
+        return int(value.strip())
+    return value
+
+
+def _normalize_legacy_values(config):
+    """规范化旧配置中曾被 GUI 接受的整数文本。"""
+    for key, _label, _minimum, _maximum in INT_FIELDS:
+        config[key] = _normalize_int(config[key])
+
+    if isinstance(config["active_days"], list):
+        config["active_days"] = [_normalize_int(day) for day in config["active_days"]]
+
+
 def _check_field_types(config):
     """检查已知字段的持久化类型和结构，不校验是否为空。"""
     errors = []
@@ -88,6 +105,7 @@ def load_config(path="config.json"):
 
     config = default_config()
     config.update(data)
+    _normalize_legacy_values(config)
     errors = _check_field_types(config)
     if errors:
         raise ConfigLoadError("；".join(errors))
@@ -118,10 +136,15 @@ def validate_config(config):
         if not _is_valid_int(value, minimum, maximum):
             errors.append(f"{label}必须在 {minimum} 到 {maximum} 之间")
 
-    if not isinstance(config.get("button1_text"), str) or not config["button1_text"]:
+    if not isinstance(config.get("button1_text"), str) or not config["button1_text"].strip():
         errors.append("第一个按钮文本不能为空")
-    if not isinstance(config.get("button2_text"), str) or not config["button2_text"]:
+    if not isinstance(config.get("button2_text"), str) or not config["button2_text"].strip():
         errors.append("第二个按钮文本不能为空")
+
+    if not isinstance(config.get("show_progress"), bool):
+        errors.append("运行时显示进度窗口必须是布尔值")
+    if not isinstance(config.get("keep_window_topmost"), bool):
+        errors.append("保持目标窗口置顶必须是布尔值")
 
     return errors
 

@@ -19,9 +19,11 @@ class ConfigGUI:
         self.root.resizable(True, True)
 
         self.config_file = config_file
+        self.load_recovery_error = None
         try:
             self.config = config_manager.load_config(self.config_file)
         except config_manager.ConfigLoadError as error:
+            self.load_recovery_error = str(error)
             messagebox.showerror("错误", f"加载配置文件失败: {error}")
             self.config = config_manager.default_config()
 
@@ -281,8 +283,8 @@ class ConfigGUI:
             "anjian_path": self.path_var.get(),
             "window_keyword": self.window_keyword_var.get().strip(),
             "active_days": [i for i in range(7) if self.week_vars[i].get()],
-            "button1_text": self.button1_text_var.get(),
-            "button2_text": self.button2_text_var.get(),
+            "button1_text": self.button1_text_var.get().strip(),
+            "button2_text": self.button2_text_var.get().strip(),
             "show_progress": bool(self.show_progress_var.get()),
             "keep_window_topmost": bool(self.keep_topmost_var.get()),
         }
@@ -300,9 +302,20 @@ class ConfigGUI:
             messagebox.showerror("错误", "\n".join(errors))
             return
 
+        if self.load_recovery_error is not None:
+            confirmed = messagebox.askyesno(
+                "确认覆盖配置",
+                "原配置文件无法恢复读取：\n"
+                f"{self.load_recovery_error}\n\n"
+                "继续保存会用当前表单覆盖原配置文件，是否确认继续？",
+            )
+            if not confirmed:
+                return
+
         try:
             config_manager.save_config(config, self.config_file)
             self.config = config
+            self.load_recovery_error = None
             self.status_var.set(f"配置已保存 {datetime.now():%H:%M:%S}")
             messagebox.showinfo("成功", "配置已保存成功！")
         except OSError as error:

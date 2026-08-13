@@ -80,6 +80,24 @@ def test_load_and_save_round_trip_all_fields(tk_root, tmp_path, monkeypatch):
     assert json.loads(path.read_text(encoding="utf-8")) == expected
 
 
+def test_legacy_integer_text_loads_and_saves_without_losing_fields(tk_root, tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    expected = full_config()
+    legacy = dict(expected, start_hour="8")
+    path.write_text(json.dumps(legacy, ensure_ascii=False), encoding="utf-8")
+    error_calls = []
+    monkeypatch.setattr("tkinter.messagebox.showerror", lambda *args: error_calls.append(args))
+    monkeypatch.setattr("tkinter.messagebox.showinfo", lambda *args: None)
+    monkeypatch.setattr("os.path.exists", lambda value: True)
+
+    gui = ConfigGUI(tk_root, config_file=str(path))
+    assert error_calls == []
+    gui.save_config_action()
+
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved == dict(expected, start_hour=8)
+
+
 def test_parse_errors_are_aggregated_and_do_not_write(tk_root, tmp_path, monkeypatch):
     path = tmp_path / "config.json"
     gui = ConfigGUI(tk_root, config_file=str(path))
@@ -147,6 +165,47 @@ def test_whitespace_keyword_blocked_and_valid_keyword_stripped(tk_root, tmp_path
     assert json.loads(path.read_text(encoding="utf-8"))["window_keyword"] == "YZ2K2"
 
 
+@pytest.mark.parametrize(
+    ("field_name", "message"),
+    [
+        ("button1_text_var", "第一个按钮文本不能为空"),
+        ("button2_text_var", "第二个按钮文本不能为空"),
+    ],
+)
+def test_whitespace_button_text_is_blocked(tk_root, tmp_path, monkeypatch, field_name, message):
+    path = tmp_path / "config.json"
+    gui = ConfigGUI(tk_root, config_file=str(path))
+    gui.path_var.set("C:/Anjian/app.exe")
+    gui.window_keyword_var.set("YZ2K2")
+    getattr(gui, field_name).set("   ")
+    monkeypatch.setattr("os.path.exists", lambda value: True)
+    calls = []
+    monkeypatch.setattr("tkinter.messagebox.showerror", lambda *args: calls.append(args))
+
+    gui.save_config_action()
+
+    assert len(calls) == 1
+    assert message in calls[0][1]
+    assert not path.is_file()
+
+
+def test_button_text_is_stripped_when_saved(tk_root, tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    gui = ConfigGUI(tk_root, config_file=str(path))
+    gui.path_var.set("C:/Anjian/app.exe")
+    gui.window_keyword_var.set("YZ2K2")
+    gui.button1_text_var.set("  开始使用  ")
+    gui.button2_text_var.set("  启动  ")
+    monkeypatch.setattr("os.path.exists", lambda value: True)
+    monkeypatch.setattr("tkinter.messagebox.showinfo", lambda *args: None)
+
+    gui.save_config_action()
+
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["button1_text"] == "开始使用"
+    assert saved["button2_text"] == "启动"
+
+
 def test_damaged_config_shows_once_and_falls_back(tk_root, tmp_path, monkeypatch):
     path = tmp_path / "config.json"
     path.write_text("{broken", encoding="utf-8")
@@ -174,3 +233,50 @@ def test_invalid_typed_config_shows_once_and_falls_back(tk_root, tmp_path, monke
     collected, errors = gui.collect_form_config()
     assert errors == []
     assert collected == config_manager.default_config()
+
+
+def _fill_recovered_form(gui):
+    gui.path_var.set("C:/Anjian/recovered.exe")
+    gui.window_keyword_var.set("RECOVERED")
+
+
+def test_recovered_form_does_not_overwrite_when_confirmation_declined(tk_root, tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    original = b'{"active_days": null}'
+    path.write_bytes(original)
+    monkeypatch.setattr("tkinter.messagebox.showerror", lambda *args: None)
+    monkeypatch.setattr("tkinter.messagebox.askyesno", lambda *args: False)
+    monkeypatch.setattr("os.path.exists", lambda value: True)
+    save_calls = []
+    monkeypatch.setattr(config_manager, "save_config", lambda *args: save_calls.append(args))
+    gui = ConfigGUI(tk_root, config_file=str(path))
+    _fill_recovered_form(gui)
+
+    gui.save_config_action()
+
+    assert save_calls == []
+    assert path.read_bytes() == original
+    assert gui.load_recovery_error is not None
+
+
+def test_recovered_form_overwrites_only_after_confirmation(tk_root, tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    path.write_text('{"active_days": null}', encoding="utf-8")
+    monkeypatch.setattr("tkinter.messagebox.showerror", lambda *args: None)
+    monkeypatch.setattr("tkinter.messagebox.showinfo", lambda *args: None)
+    confirm_calls = []
+    monkeypatch.setattr(
+        "tkinter.messagebox.askyesno",
+        lambda *args: confirm_calls.append(args) or True,
+    )
+    monkeypatch.setattr("os.path.exists", lambda value: True)
+    gui = ConfigGUI(tk_root, config_file=str(path))
+    _fill_recovered_form(gui)
+
+    gui.save_config_action()
+
+    assert len(confirm_calls) == 1
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["anjian_path"] == "C:/Anjian/recovered.exe"
+    assert saved["window_keyword"] == "RECOVERED"
+    assert gui.load_recovery_error is None
