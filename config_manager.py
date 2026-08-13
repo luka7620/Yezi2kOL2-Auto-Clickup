@@ -1,7 +1,10 @@
 """配置文件的加载、校验与保存逻辑。"""
 import copy
 import json
+import os
 import re
+import tempfile
+from pathlib import Path
 
 
 DEFAULT_CONFIG = {
@@ -154,6 +157,30 @@ def validate_config(config):
 
 
 def save_config(config, path="config.json"):
-    """以现有格式将配置保存到文件。"""
-    with open(path, "w", encoding="utf-8") as config_file:
-        json.dump(config, config_file, indent=4, ensure_ascii=False)
+    """在目标目录中原子写入配置，失败时保留原文件。"""
+    target = Path(path)
+    parent = target.parent
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=parent,
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as config_file:
+            temp_path = Path(config_file.name)
+            json.dump(config, config_file, indent=4, ensure_ascii=False)
+            config_file.flush()
+            os.fsync(config_file.fileno())
+
+        os.replace(temp_path, target)
+        temp_path = None
+    except BaseException:
+        if temp_path is not None:
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+        raise

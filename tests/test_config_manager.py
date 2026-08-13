@@ -185,6 +185,64 @@ def test_save_load_round_trip_preserves_all_fields(tmp_path):
     assert set(json.loads(path.read_text(encoding="utf-8"))) == DIRECT_KEYS | FALLBACK_KEYS
 
 
+def test_save_write_failure_preserves_original_and_cleans_temp(tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    original = b'{"original": true}'
+    path.write_bytes(original)
+
+    def fail_after_partial_write(config, stream, **kwargs):
+        stream.write('{"partial":')
+        raise RuntimeError("write failed")
+
+    monkeypatch.setattr(config_manager.json, "dump", fail_after_partial_write)
+    with pytest.raises(RuntimeError, match="write failed"):
+        config_manager.save_config({"value": 1}, path)
+
+    assert path.read_bytes() == original
+    assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+
+
+def test_save_replace_failure_preserves_original_and_cleans_temp(tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    original = b'{"original": true}'
+    path.write_bytes(original)
+
+    def fail_replace(source, target):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(config_manager.os, "replace", fail_replace)
+    with pytest.raises(OSError, match="replace failed"):
+        config_manager.save_config({"value": 1}, path)
+
+    assert path.read_bytes() == original
+    assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+
+
+def test_save_closes_temp_file_before_replace(tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    created = {}
+    real_named_temp = config_manager.tempfile.NamedTemporaryFile
+
+    def record_named_temp(*args, **kwargs):
+        created["stream"] = real_named_temp(*args, **kwargs)
+        return created["stream"]
+
+    replace_calls = []
+
+    def record_replace(source, target):
+        assert created["stream"].closed
+        replace_calls.append((source, target))
+
+    monkeypatch.setattr(config_manager.tempfile, "NamedTemporaryFile", record_named_temp)
+    monkeypatch.setattr(config_manager.os, "replace", record_replace)
+    config_manager.save_config({"value": 1}, path)
+
+    assert len(replace_calls) == 1
+    source = replace_calls[0][0]
+    assert source.exists()
+    source.unlink()
+
+
 def test_validate_valid_config_and_does_not_check_path_exists():
     config = config_manager.default_config()
     config["anjian_path"] = "/definitely/not/a/real/file.exe"

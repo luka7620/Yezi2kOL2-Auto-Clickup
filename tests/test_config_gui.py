@@ -100,6 +100,63 @@ def test_gui_save_preserves_unknown_config_fields(tk_root, tmp_path, monkeypatch
     assert saved["window_keyword"] == expected["window_keyword"]
 
 
+def test_gui_encoding_failure_preserves_original_file(tk_root, tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    persisted = full_config()
+    persisted["custom_key"] = "\ud800"
+    original = json.dumps(persisted, ensure_ascii=True).encode("utf-8")
+    path.write_bytes(original)
+    error_calls = []
+    info_calls = []
+    monkeypatch.setattr("tkinter.messagebox.showerror", lambda *args: error_calls.append(args))
+    monkeypatch.setattr("tkinter.messagebox.showinfo", lambda *args: info_calls.append(args))
+    monkeypatch.setattr("os.path.exists", lambda value: True)
+
+    gui = ConfigGUI(tk_root, config_file=str(path))
+    previous_config = gui.config.copy()
+    previous_status = gui.status_var.get()
+    gui.button_wait_var.set("13")
+
+    gui.save_config_action()
+
+    assert len(error_calls) == 1
+    assert "保存配置失败" in error_calls[0][1]
+    assert info_calls == []
+    assert path.read_bytes() == original
+    assert gui.config == previous_config
+    assert gui.status_var.get() == previous_status
+
+
+def test_gui_write_failure_does_not_mark_config_saved(tk_root, tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    expected = full_config()
+    path.write_text(json.dumps(expected, ensure_ascii=False), encoding="utf-8")
+    original = path.read_bytes()
+    error_calls = []
+    info_calls = []
+    monkeypatch.setattr("tkinter.messagebox.showerror", lambda *args: error_calls.append(args))
+    monkeypatch.setattr("tkinter.messagebox.showinfo", lambda *args: info_calls.append(args))
+    monkeypatch.setattr("os.path.exists", lambda value: True)
+    monkeypatch.setattr(
+        config_manager,
+        "save_config",
+        lambda *args: (_ for _ in ()).throw(RuntimeError("simulated write failure")),
+    )
+
+    gui = ConfigGUI(tk_root, config_file=str(path))
+    previous_config = gui.config.copy()
+    previous_status = gui.status_var.get()
+    gui.button_wait_var.set("13")
+    gui.save_config_action()
+
+    assert len(error_calls) == 1
+    assert "simulated write failure" in error_calls[0][1]
+    assert info_calls == []
+    assert path.read_bytes() == original
+    assert gui.config == previous_config
+    assert gui.status_var.get() == previous_status
+
+
 def test_legacy_integer_text_loads_and_saves_without_losing_fields(tk_root, tmp_path, monkeypatch):
     path = tmp_path / "config.json"
     expected = full_config()

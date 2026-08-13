@@ -319,7 +319,7 @@ class ConfigGUI:
             self.load_recovery_error = None
             self.status_var.set(f"配置已保存 {datetime.now():%H:%M:%S}")
             messagebox.showinfo("成功", "配置已保存成功！")
-        except OSError as error:
+        except Exception as error:
             messagebox.showerror("错误", f"保存配置失败: {error}")
 
     def _ensure_config_recovered(self):
