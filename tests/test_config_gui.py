@@ -110,6 +110,43 @@ def test_validation_failure_does_not_call_save(tk_root, tmp_path, monkeypatch):
     assert calls == []
 
 
+def test_fresh_form_with_only_path_does_not_save(tk_root, tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    gui = ConfigGUI(tk_root, config_file=str(path))
+    gui.path_var.set("C:/Anjian/app.exe")
+    monkeypatch.setattr("os.path.exists", lambda value: True)
+    calls = []
+    monkeypatch.setattr("tkinter.messagebox.showerror", lambda *args: calls.append(args))
+
+    gui.save_config_action()
+
+    assert len(calls) == 1
+    assert "窗口关键词不能为空" in calls[0][1]
+    assert not path.is_file()
+
+
+def test_whitespace_keyword_blocked_and_valid_keyword_stripped(tk_root, tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    gui = ConfigGUI(tk_root, config_file=str(path))
+    gui.path_var.set("C:/Anjian/app.exe")
+    monkeypatch.setattr("os.path.exists", lambda value: True)
+    error_calls = []
+    info_calls = []
+    monkeypatch.setattr("tkinter.messagebox.showerror", lambda *args: error_calls.append(args))
+    monkeypatch.setattr("tkinter.messagebox.showinfo", lambda *args: info_calls.append(args))
+
+    gui.window_keyword_var.set("   ")
+    gui.save_config_action()
+    assert len(error_calls) == 1
+    assert "窗口关键词不能为空" in error_calls[0][1]
+    assert not path.is_file()
+
+    gui.window_keyword_var.set(" YZ2K2 ")
+    gui.save_config_action()
+    assert len(info_calls) == 1
+    assert json.loads(path.read_text(encoding="utf-8"))["window_keyword"] == "YZ2K2"
+
+
 def test_damaged_config_shows_once_and_falls_back(tk_root, tmp_path, monkeypatch):
     path = tmp_path / "config.json"
     path.write_text("{broken", encoding="utf-8")

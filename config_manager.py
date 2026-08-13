@@ -57,6 +57,9 @@ def validate_config(config):
     if not isinstance(config.get("anjian_path"), str) or not config["anjian_path"]:
         errors.append("请选择按键精灵程序路径")
 
+    if not isinstance(config.get("window_keyword"), str) or not config["window_keyword"].strip():
+        errors.append("窗口关键词不能为空")
+
     active_days = config.get("active_days")
     if not active_days:
         errors.append("请至少选择一个生效日期")

@@ -102,6 +102,7 @@ def test_save_load_round_trip_preserves_all_fields(tmp_path):
 def test_validate_valid_config_and_does_not_check_path_exists():
     config = config_manager.default_config()
     config["anjian_path"] = "/definitely/not/a/real/file.exe"
+    config["window_keyword"] = "YZ2K2"
     assert config_manager.validate_config(config) == []
 
 
@@ -109,6 +110,9 @@ def test_validate_valid_config_and_does_not_check_path_exists():
     ("changes", "message"),
     [
         ({"anjian_path": ""}, "请选择按键精灵程序路径"),
+        ({"window_keyword": ""}, "窗口关键词不能为空"),
+        ({"window_keyword": "   "}, "窗口关键词不能为空"),
+        ({"window_keyword": 123}, "窗口关键词不能为空"),
         ({"active_days": []}, "请至少选择一个生效日期"),
         ({"active_days": [7]}, "生效日期必须是 0 到 6 之间的整数"),
         ({"start_hour": 24}, "开始时间（时）必须在 0 到 23 之间"),
@@ -123,5 +127,6 @@ def test_validate_valid_config_and_does_not_check_path_exists():
 def test_validate_reports_expected_errors(changes, message):
     config = config_manager.default_config()
     config["anjian_path"] = "app.exe"
+    config["window_keyword"] = "YZ2K2"
     config.update(changes)
     assert message in config_manager.validate_config(config)

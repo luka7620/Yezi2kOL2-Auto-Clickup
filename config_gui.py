@@ -95,7 +95,7 @@ class ConfigGUI:
         ttk.Label(target_group, text="窗口关键词:").grid(row=0, column=0, sticky="e", padx=(0, 10))
         self.window_keyword_entry = ttk.Entry(target_group, textvariable=self.window_keyword_var)
         self.window_keyword_entry.grid(row=0, column=1, sticky="ew")
-        self._help_label(target_group, "要点击的目标窗口标题关键字，如 YZ2K2", 1)
+        self._help_label(target_group, "要点击的目标窗口标题关键字（必填），如 YZ2K2", 1)
         ttk.Label(target_group, text="第一个按钮:").grid(row=2, column=0, sticky="e", padx=(0, 10))
         self.button1_entry = ttk.Entry(target_group, textvariable=self.button1_text_var)
         self.button1_entry.grid(row=2, column=1, sticky="ew")
@@ -279,7 +279,7 @@ class ConfigGUI:
         )
         config = {
             "anjian_path": self.path_var.get(),
-            "window_keyword": self.window_keyword_var.get(),
+            "window_keyword": self.window_keyword_var.get().strip(),
             "active_days": [i for i in range(7) if self.week_vars[i].get()],
             "button1_text": self.button1_text_var.get(),
             "button2_text": self.button2_text_var.get(),
