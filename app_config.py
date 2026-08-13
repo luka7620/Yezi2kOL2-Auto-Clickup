@@ -38,6 +38,10 @@ NUMBER_RULES = {
 }
 
 
+class ConfigLoadError(Exception):
+    """配置文件存在但无法读取或解析。"""
+
+
 @dataclass
 class ValidationResult:
     errors: list[str] = field(default_factory=list)
@@ -58,24 +62,28 @@ def get_config_path() -> str:
     return os.path.abspath(os.path.join(get_app_dir(), "config.json"))
 
 
-def _default_copy() -> dict:
+def default_config() -> dict:
+    """返回可安全修改的规范默认配置副本。"""
     return {**DEFAULT_CONFIG, "active_days": list(DEFAULT_CONFIG["active_days"])}
 
 
 def load_config(path: str) -> dict:
-    config = _default_copy()
     try:
         with open(path, "r", encoding="utf-8") as config_file:
             loaded = json.load(config_file)
-        if isinstance(loaded, dict):
-            config.update(loaded)
-    except (OSError, ValueError, TypeError):
-        pass
+    except FileNotFoundError:
+        return default_config()
+    except (OSError, ValueError, UnicodeDecodeError) as error:
+        raise ConfigLoadError(f"无法读取或解析配置文件 {path}：{error}") from error
+    if not isinstance(loaded, dict):
+        raise ConfigLoadError(f"无法解析配置文件 {path}：顶层内容必须是 JSON 对象")
+    config = default_config()
+    config.update(loaded)
     return config
 
 
-def save_config(path: str, updates: dict) -> dict:
-    config = load_config(path)
+def save_config(path: str, updates: dict, reset: bool = False) -> dict:
+    config = default_config() if reset else load_config(path)
     config.update(updates)
     directory = os.path.dirname(os.path.abspath(path))
     os.makedirs(directory, exist_ok=True)
@@ -83,6 +91,18 @@ def save_config(path: str, updates: dict) -> dict:
         json.dump(config, config_file, ensure_ascii=False, indent=4)
         config_file.write("\n")
     return config
+
+
+def resolve_show_progress(path: str) -> bool:
+    """决定启动时是否显示进度窗口。
+
+    配置损坏时恢复规范默认值并显示窗口，让运行端后续的配置加载错误
+    能通过进度界面呈现给用户，而不是静默无窗退出。
+    """
+    try:
+        return bool(load_config(path)["show_progress"])
+    except ConfigLoadError:
+        return bool(DEFAULT_CONFIG["show_progress"])
 
 
 def validate_raw_fields(raw: dict[str, str]) -> ValidationResult:

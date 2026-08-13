@@ -39,7 +39,41 @@ class AppConfigTests(unittest.TestCase):
             self.assertEqual(app_config.load_config(path)["end_hour"], 22)
             with open(path, "w", encoding="utf-8") as target:
                 target.write("not json")
-            self.assertEqual(app_config.load_config(path), self.EXPECTED)
+            with self.assertRaises(app_config.ConfigLoadError):
+                app_config.load_config(path)
+            with open(path, "w", encoding="utf-8") as target:
+                json.dump([1, 2], target)
+            with self.assertRaises(app_config.ConfigLoadError):
+                app_config.load_config(path)
+
+    def test_save_config_blocks_broken_file_unless_reset(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "config.json")
+            broken = b'{"start_hour": '
+            with open(path, "wb") as target:
+                target.write(broken)
+            with self.assertRaises(app_config.ConfigLoadError):
+                app_config.save_config(path, {"start_hour": 9})
+            with open(path, "rb") as source:
+                self.assertEqual(source.read(), broken)
+
+            app_config.save_config(path, {"start_hour": 9}, reset=True)
+            loaded = app_config.load_config(path)
+            self.assertEqual(loaded["start_hour"], 9)
+            self.assertEqual(loaded["end_hour"], self.EXPECTED["end_hour"])
+            self.assertEqual(set(loaded), set(self.EXPECTED))
+
+    def test_resolve_show_progress_missing_partial_and_broken(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "config.json")
+            expected_default = app_config.DEFAULT_CONFIG["show_progress"]
+            self.assertEqual(app_config.resolve_show_progress(path), expected_default)
+            with open(path, "w", encoding="utf-8") as target:
+                json.dump({"show_progress": False}, target)
+            self.assertFalse(app_config.resolve_show_progress(path))
+            with open(path, "w", encoding="utf-8") as target:
+                target.write("not json")
+            self.assertEqual(app_config.resolve_show_progress(path), expected_default)
 
     def test_save_preserves_unknown_key_and_chinese(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -21,9 +21,20 @@ class ConfigGUI:
         self.root.columnconfigure(0, weight=1)
 
         self.config_file = os.path.abspath(config_path or app_config.get_config_path())
-        self.config = app_config.load_config(self.config_file)
+        self.load_error = None
+        try:
+            self.config = app_config.load_config(self.config_file)
+        except app_config.ConfigLoadError as error:
+            self.load_error = error
+            self.config = app_config.default_config()
         self.create_widgets()
         self.load_values()
+        if self.load_error is not None:
+            self.status_var.set("配置文件损坏")
+            messagebox.showerror(
+                "配置加载失败",
+                f"{self.load_error}\n\n配置文件已损坏，界面显示的是默认值；保存将覆盖原文件。",
+            )
 
     def create_widgets(self):
         main = ttk.Frame(self.root, padding=12)
@@ -218,12 +229,20 @@ class ConfigGUI:
         if result.warnings and not messagebox.askyesno("配置警告", "\n".join(result.warnings) + "\n\n路径当前不存在，仍要保存吗？"):
             self.status_var.set("已取消保存")
             return False
+        reset = self.load_error is not None
+        if reset and not messagebox.askyesno(
+            "确认重置配置",
+            "原配置文件无法解析，保存将用当前界面值完全覆盖原文件（原内容丢失）。确定继续？",
+        ):
+            self.status_var.set("已取消保存")
+            return False
         try:
-            self.config = app_config.save_config(self.config_file, updates)
-        except OSError as error:
+            self.config = app_config.save_config(self.config_file, updates, reset=reset)
+        except (OSError, app_config.ConfigLoadError) as error:
             self.status_var.set("保存失败")
             messagebox.showerror("错误", f"保存配置失败：{error}")
             return False
+        self.load_error = None
         self.status_var.set("配置已保存")
         messagebox.showinfo("成功", "配置已保存成功！")
         return True

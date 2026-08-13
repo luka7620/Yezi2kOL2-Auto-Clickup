@@ -78,6 +78,39 @@ class ConfigGUISmokeTests(TkTestCase):
                 self.assertTrue(gui.save_config_action())
             self.assertNotEqual(self.read_bytes(path), original)
 
+    def test_broken_config_shows_error_and_blocks_save(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "config.json")
+            broken = b'{"start_hour": '
+            with open(path, "wb") as target:
+                target.write(broken)
+
+            with mock.patch("config_gui.messagebox.showerror") as showerror:
+                gui = ConfigGUI(self.root, config_path=path)
+            showerror.assert_called_once()
+            self.assertIsNotNone(gui.load_error)
+            self.assertEqual(gui.start_hour_var.get(), "8")
+            gui.path_var.set(__file__)
+
+            with mock.patch("config_gui.messagebox.askyesno", return_value=False):
+                self.assertFalse(gui.save_config_action())
+            self.assertEqual(self.read_bytes(path), broken)
+
+            with mock.patch("config_gui.messagebox.askyesno", return_value=True), \
+                    mock.patch("config_gui.messagebox.showinfo"):
+                self.assertTrue(gui.save_config_action())
+            self.assertIsNone(gui.load_error)
+            self.assertEqual(app_config.load_config(path)["anjian_path"], __file__)
+
+    def test_missing_config_uses_defaults_without_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "config.json")
+            with mock.patch("config_gui.messagebox.showerror") as showerror:
+                gui = ConfigGUI(self.root, config_path=path)
+            showerror.assert_not_called()
+            self.assertIsNone(gui.load_error)
+            self.assertEqual(gui.start_hour_var.get(), "8")
+
     def test_missing_targets_do_not_run_commands(self):
         with tempfile.TemporaryDirectory() as directory:
             path = os.path.join(directory, "config.json")

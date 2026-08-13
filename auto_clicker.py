@@ -632,14 +632,8 @@ def main():
     
     # 从配置文件读取是否显示窗口
     show_window_config = True
-    config_path = app_config.get_config_path()
-    if os.path.exists(config_path) and not force_window and not no_window:
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                show_window_config = config.get("show_progress", True)
-        except:
-            pass
+    if not force_window and not no_window:
+        show_window_config = app_config.resolve_show_progress(app_config.get_config_path())
     
     # 决定是否显示窗口
     show_window = force_window or (not no_window and show_window_config)
