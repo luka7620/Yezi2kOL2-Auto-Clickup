@@ -2,11 +2,22 @@
 进度显示窗口 - 实时显示脚本执行状态
 """
 import tkinter as tk
-from tkinter import scrolledtext
+from tkinter import scrolledtext, ttk
 import threading
 import queue
 import time
 import logging
+
+
+COLORS = {
+    'dark': '#2C3E50',
+    'primary': '#3498DB',
+    'error': '#E74C3C',
+    'success': '#27AE60',
+    'warning': '#F39C12',
+    'muted': '#7F8C8D',
+    'log_background': '#F8F9FA',
+}
 
 
 class ProgressWindow:
@@ -46,7 +57,7 @@ class ProgressWindow:
     def create_widgets(self):
         """创建界面元素"""
         # 标题
-        title_frame = tk.Frame(self.root, bg='#2C3E50', height=60)
+        title_frame = tk.Frame(self.root, bg=COLORS['dark'], height=60)
         title_frame.pack(fill=tk.X)
         title_frame.pack_propagate(False)
         
@@ -54,7 +65,7 @@ class ProgressWindow:
             title_frame,
             text="按键精灵自动启动",
             font=("Microsoft YaHei", 16, "bold"),
-            bg='#2C3E50',
+            bg=COLORS['dark'],
             fg='white'
         )
         title_label.pack(expand=True)
@@ -64,7 +75,7 @@ class ProgressWindow:
             self.root,
             text="正在初始化...",
             font=("Microsoft YaHei", 11),
-            fg='#3498DB',
+            fg=COLORS['primary'],
             pady=10
         )
         self.status_label.pack()
@@ -77,30 +88,29 @@ class ProgressWindow:
             log_frame,
             wrap=tk.WORD,
             font=("Consolas", 9),
-            bg='#F8F9FA',
-            fg='#2C3E50',
+            bg=COLORS['log_background'],
+            fg=COLORS['dark'],
             relief=tk.FLAT,
             borderwidth=1
         )
         self.log_text.pack(fill=tk.BOTH, expand=True)
         self.log_text.config(state=tk.DISABLED)
         
-        # 进度条（使用标签模拟）
-        self.progress_frame = tk.Frame(self.root, bg='#ECF0F1', height=30)
+        self.progress_frame = ttk.Frame(self.root)
         self.progress_frame.pack(fill=tk.X, padx=10, pady=5)
-        self.progress_frame.pack_propagate(False)
-        
-        self.progress_bar = tk.Frame(self.progress_frame, bg='#3498DB', width=0)
-        self.progress_bar.place(x=0, y=0, relheight=1)
-        
-        self.progress_text = tk.Label(
+        self.progress_frame.columnconfigure(0, weight=1)
+        self.progress_bar = ttk.Progressbar(
+            self.progress_frame, mode='determinate', maximum=100, value=0
+        )
+        self.progress_bar.grid(row=0, column=0, sticky='ew')
+        self.progress_text = ttk.Label(
             self.progress_frame,
             text="0%",
             font=("Microsoft YaHei", 9),
-            bg='#ECF0F1',
-            fg='#2C3E50'
+            width=5,
+            anchor=tk.E,
         )
-        self.progress_text.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        self.progress_text.grid(row=0, column=1, padx=(8, 0))
         
         # 底部按钮框
         button_frame = tk.Frame(self.root)
@@ -111,7 +121,7 @@ class ProgressWindow:
             text="手动关闭",
             command=self.close_window,
             font=("Microsoft YaHei", 10),
-            bg='#E74C3C',
+            bg=COLORS['error'],
             fg='white',
             relief=tk.FLAT,
             padx=20,
@@ -125,7 +135,7 @@ class ProgressWindow:
             button_frame,
             text="",
             font=("Microsoft YaHei", 9),
-            fg='#7F8C8D'
+            fg=COLORS['muted']
         )
         self.countdown_label.pack(side=tk.LEFT)
         
@@ -133,7 +143,7 @@ class ProgressWindow:
         """添加日志消息"""
         self.message_queue.put(('log', message, level))
         
-    def update_status(self, status, color='#3498DB'):
+    def update_status(self, status, color=COLORS['primary']):
         """更新状态文本"""
         self.message_queue.put(('status', status, color))
         
@@ -158,16 +168,16 @@ class ProgressWindow:
                     # 根据级别设置颜色
                     if level == 'ERROR':
                         tag = 'error'
-                        self.log_text.tag_config('error', foreground='#E74C3C')
+                        self.log_text.tag_config('error', foreground=COLORS['error'])
                     elif level == 'WARNING':
                         tag = 'warning'
-                        self.log_text.tag_config('warning', foreground='#F39C12')
+                        self.log_text.tag_config('warning', foreground=COLORS['warning'])
                     elif level == 'SUCCESS':
                         tag = 'success'
-                        self.log_text.tag_config('success', foreground='#27AE60')
+                        self.log_text.tag_config('success', foreground=COLORS['success'])
                     else:
                         tag = 'info'
-                        self.log_text.tag_config('info', foreground='#2C3E50')
+                        self.log_text.tag_config('info', foreground=COLORS['dark'])
                     
                     timestamp = time.strftime('%H:%M:%S')
                     self.log_text.insert(tk.END, f"[{timestamp}] {message}\n", tag)
@@ -180,8 +190,8 @@ class ProgressWindow:
                     
                 elif msg_type == 'progress':
                     percent = args[0]
-                    width = int(self.progress_frame.winfo_width() * percent / 100)
-                    self.progress_bar.config(width=width)
+                    percent = max(0, min(100, float(percent)))
+                    self.progress_bar['value'] = percent
                     self.progress_text.config(text=f"{int(percent)}%")
                     
         except queue.Empty:
@@ -295,4 +305,3 @@ if __name__ == "__main__":
     
     # 运行窗口
     window.run()
-

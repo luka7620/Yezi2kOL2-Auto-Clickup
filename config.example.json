@@ -4,7 +4,7 @@
     "start_minute": 0,
     "end_hour": 22,
     "end_minute": 0,
-    "active_days": [0, 1, 2, 3, 4],
+    "active_days": [0, 1, 2, 3, 4, 5, 6],
     "boot_delay": 15,
     "launch_wait": 8,
     "retry_count": 5,
@@ -16,4 +16,3 @@
     "show_progress": true,
     "keep_window_topmost": false
 }
-
