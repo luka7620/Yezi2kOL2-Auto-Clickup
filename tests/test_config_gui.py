@@ -1,0 +1,123 @@
+import json
+
+import pytest
+
+tk = pytest.importorskip("tkinter", reason="未安装 Tkinter，跳过 GUI 测试")
+
+import config_manager
+from config_gui import ConfigGUI
+
+
+@pytest.fixture
+def tk_root():
+    try:
+        root = tk.Tk()
+    except tk.TclError:
+        pytest.skip("无显示环境，跳过 GUI 测试")
+    root.withdraw()
+    yield root
+    root.destroy()
+
+
+def is_descendant(widget, parent):
+    current = widget
+    while current is not None:
+        if current == parent:
+            return True
+        current = current.master
+    return False
+
+
+def full_config():
+    config = config_manager.default_config()
+    config.update(
+        anjian_path="C:/Anjian/app.exe",
+        start_hour=9,
+        start_minute=10,
+        end_hour=20,
+        end_minute=30,
+        active_days=[1, 3, 5],
+        boot_delay=21,
+        launch_wait=11,
+        retry_count=7,
+        retry_interval=6,
+        button1_text="打开",
+        button2_text="运行",
+        button_wait=9,
+        window_keyword="YZ2K2",
+        show_progress=False,
+        keep_window_topmost=True,
+    )
+    return config
+
+
+def test_notebook_tabs_and_widget_ownership(tk_root, tmp_path):
+    gui = ConfigGUI(tk_root, config_file=str(tmp_path / "config.json"))
+    assert gui.notebook.tabs() == (
+        str(gui.tab_basic),
+        str(gui.tab_schedule),
+        str(gui.tab_advanced),
+    )
+    assert is_descendant(gui.window_keyword_entry, gui.tab_basic)
+    assert is_descendant(gui.button_wait_spinbox, gui.tab_basic)
+    assert is_descendant(gui.show_progress_checkbutton, gui.tab_advanced)
+    assert is_descendant(gui.keep_topmost_checkbutton, gui.tab_advanced)
+
+
+def test_load_and_save_round_trip_all_fields(tk_root, tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    expected = full_config()
+    path.write_text(json.dumps(expected, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr("tkinter.messagebox.showinfo", lambda *args: None)
+    monkeypatch.setattr("tkinter.messagebox.showerror", lambda *args: None)
+    monkeypatch.setattr("os.path.exists", lambda value: True)
+
+    gui = ConfigGUI(tk_root, config_file=str(path))
+    collected, errors = gui.collect_form_config()
+    assert errors == []
+    assert collected == expected
+    gui.save_config_action()
+    assert json.loads(path.read_text(encoding="utf-8")) == expected
+
+
+def test_parse_errors_are_aggregated_and_do_not_write(tk_root, tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    gui = ConfigGUI(tk_root, config_file=str(path))
+    gui.boot_delay_var.set("")
+    gui.retry_count_var.set("abc")
+    gui.path_var.set("")
+    calls = []
+    monkeypatch.setattr("tkinter.messagebox.showerror", lambda *args: calls.append(args))
+
+    gui.save_config_action()
+
+    assert len(calls) == 1
+    message = calls[0][1]
+    assert message.count("必须是整数") == 2
+    assert "请选择按键精灵程序路径" in message
+    assert not path.exists()
+
+
+def test_validation_failure_does_not_call_save(tk_root, tmp_path, monkeypatch):
+    gui = ConfigGUI(tk_root, config_file=str(tmp_path / "config.json"))
+    gui.path_var.set("app.exe")
+    gui.start_hour_var.set("99")
+    monkeypatch.setattr("os.path.exists", lambda value: True)
+    monkeypatch.setattr("tkinter.messagebox.showerror", lambda *args: None)
+    calls = []
+    monkeypatch.setattr(config_manager, "save_config", lambda *args: calls.append(args))
+    gui.save_config_action()
+    assert calls == []
+
+
+def test_damaged_config_shows_once_and_falls_back(tk_root, tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    path.write_text("{broken", encoding="utf-8")
+    calls = []
+    monkeypatch.setattr("tkinter.messagebox.showerror", lambda *args: calls.append(args))
+    gui = ConfigGUI(tk_root, config_file=str(path))
+    assert len(calls) == 1
+    assert gui.config == config_manager.default_config()
+    collected, errors = gui.collect_form_config()
+    assert errors == []
+    assert collected == config_manager.default_config()
